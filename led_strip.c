@@ -1,39 +1,18 @@
-#include <linux/cdev.h>
 #include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/parser.h>
 #include <linux/printk.h>
 
+#include "led_strip.h"
+#include "led_control.h"
+
 #define MAX_DEVICES 2
 #define DEVICE_NAME "led_strip"
-#define MAX_LEDS_PER_DEVICE 300
-#define MAX_LED_ARRAY_SIZE (3 * MAX_LEDS_PER_DEVICE)
 
 dev_t device_number;
 static struct class *led_strip_class;
 static struct cdev led_strip_cdev[MAX_DEVICES];
-
-/**
- * struct led_strip_priv: Private data for led_strip driver
- *
- * Specifically, this gets allocated on file open and freed on file close
- */
-struct led_strip_priv {
-	/**
-	 * @cdev: reference to parent character device
-	 */
-	struct cdev *cdev;
-	/**
-	 * @strip_no: Which strip this is (corresponds to device minor no)
-	 */
-	int strip_no;
-	/**
-   * @values_to_write: parsed values to write out to led strip 
-	 * Note that there is no locking read-write access to this (currently)
-	 */
-	u8 values_to_write[MAX_LED_ARRAY_SIZE];
-};
 
 /* LED Control */
 
@@ -80,6 +59,8 @@ static int parse_control_string(struct led_strip_priv *ctx, char *buf, size_t co
 	} while (next != '[');
 	/* head is at the first char after [ */
 
+	next = *head;
+
 	/* Parse some number of LED strings */
 	while (next != ']' && led_count < MAX_LEDS_PER_DEVICE) {
 		if (next == '{') {
@@ -87,37 +68,38 @@ static int parse_control_string(struct led_strip_priv *ctx, char *buf, size_t co
 			substring_t num_substring;
 			unsigned int match_value;
 			int match_result = 0;
+
 			head++;
 
 			/* Red */
 			num_token = strsep(&head, ",");
 			num_substring.from = num_token;
-			num_substring.to = head;
+			num_substring.to = head - 1;
 			match_result = match_uint(&num_substring, &match_value);
 			ctx->values_to_write[led_count * 3] = match_value;
 			if (match_result)
-				pr_err("%s: Error on red num_token %s, led_count %d, err %d\n", __func__,
-				       num_token, led_count, match_result);
+				pr_err("%s: Error on red num_token %s, led_count %d, err %d\n",
+				       __func__, num_token, led_count, match_result);
 			
 			/* Green */
 			num_token = strsep(&head, ",");
 			num_substring.from = num_token;
-			num_substring.to = head;
+			num_substring.to = head - 1;
 			match_result = match_uint(&num_substring, &match_value);
 			ctx->values_to_write[led_count * 3 + 1] = match_value;
 			if (match_result)
-				pr_err("%s: Error on grn num_token %s, led_count %d, err %d\n", __func__,
-				       num_token, led_count, match_result);
+				pr_err("%s: Error on grn num_token %s, led_count %d, err %d\n",
+				       __func__, num_token, led_count, match_result);
 				
 			/* Blue */
 			num_token = strsep(&head, "}");
 			num_substring.from = num_token;
-			num_substring.to = head;
+			num_substring.to = head - 1;
 			match_result = match_uint(&num_substring, &match_value);
 			ctx->values_to_write[led_count * 3 + 2] = match_value;
 			if (match_result)
-				pr_err("%s: Error on grn num_token %s, led_count %d, err %d\n", __func__,
-				       num_token, led_count, match_result);
+				pr_err("%s: Error on blu num_token %s, led_count %d, err %d\n",
+				       __func__, num_token, led_count, match_result);
 
 			next = *head;
 			++led_count;
@@ -192,10 +174,12 @@ ssize_t led_strip_write(struct file *file, const char __user *user_buffer,
 	ret = parse_control_string(ctx, tmp_buffer, count);
 	
 	/* Debug: print parsed led values */
-	if (ret > 0) {
-		dump_led_buffer(ctx, ret);
-	}
+	if (ret < 0)
+		goto out_write;
 
+	dump_led_buffer(ctx, ret);
+
+out_write:
 	kfree(tmp_buffer);
 	return count;
 }
