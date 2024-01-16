@@ -1,0 +1,3 @@
+led-strip-objs = led_strip.o led_control.o
+
+obj-m += led-strip.o
