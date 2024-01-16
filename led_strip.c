@@ -11,7 +11,12 @@ dev_t device_number;
 static struct class *led_strip_class;
 static struct cdev led_strip_cdev[MAX_DEVICES];
 
-struct led_strip_driver_priv {
+/**
+ * struct led_strip_priv: Private data for led_strip driver
+ *
+ * Specifically, this gets allocated on file open and freed on file close
+ */
+struct led_strip_priv {
 	/**
 	 * @cdev: reference to parent character device
 	 */
@@ -22,11 +27,21 @@ struct led_strip_driver_priv {
 	int strip_no;
 };
 
+/* Class Operations */
+
+static int led_strip_uevent(struct device *dev, struct kobj_uevent_env *env)
+{
+    add_uevent_var(env, "DEVMODE=%#o", 0222);
+    return 0;
+}
+
+/* File Operations */
+
 static int led_strip_open(struct inode *inode, struct file *file)
 {
-	struct led_strip_driver_priv *ctx;
+	struct led_strip_priv *ctx;
 
-	file->private_data = kzalloc(sizeof(struct led_strip_driver_priv), GFP_KERNEL);
+	file->private_data = kzalloc(sizeof(struct led_strip_priv), GFP_KERNEL);
 	if (!file->private_data)
 		return -EINVAL;
 	ctx = file->private_data;
@@ -41,7 +56,7 @@ static int led_strip_open(struct inode *inode, struct file *file)
 static int led_strip_release(struct inode *inode, struct file *file)
 {
   int ret = 0;
-	struct led_strip_driver_priv *ctx = file->private_data;
+	struct led_strip_priv *ctx = file->private_data;
 
 	if (ctx) {
 		pr_info("Closing led_strip %d\n", ctx->strip_no);
@@ -55,17 +70,19 @@ static int led_strip_release(struct inode *inode, struct file *file)
 	return ret;
 };
 
-ssize_t led_strip_read(struct file *file, char __user *user_buffer,
-		       size_t count, loff_t *offset)
-{
-	pr_info("%s\n", __func__);
-	return 0;
-}
-
 ssize_t led_strip_write(struct file *file, const char __user *user_buffer,
 			size_t count, loff_t *offset)
 {
-	pr_info("%s\n", __func__);
+	char *tmp_buffer = kzalloc(count + 1, GFP_KERNEL);
+
+	if (!tmp_buffer)
+		return 0;
+	
+	strscpy(tmp_buffer, user_buffer, count);
+
+	pr_info("%s: <%s> count %ld\n", __func__, tmp_buffer, count);
+
+	kfree(tmp_buffer);
 	return count;
 }
 
@@ -73,9 +90,10 @@ struct file_operations fops = {
 	.owner = THIS_MODULE,
 	.open = led_strip_open,
 	.release = led_strip_release,
-	.read = led_strip_read,
 	.write = led_strip_write,
 };
+
+/* Device Operations */
 
 static int __init ledstrip_init(void)
 {
@@ -90,6 +108,7 @@ static int __init ledstrip_init(void)
 		int i = 0;
 
 		led_strip_class = class_create(THIS_MODULE, "led_strip_class");
+		led_strip_class->dev_uevent = led_strip_uevent;
 		for(i = 0; i < MAX_DEVICES; ++i) {
 			my_device = MKDEV(major, i);
 			cdev_init(&led_strip_cdev[i], &fops);
