@@ -120,8 +120,8 @@ static int parse_control_string(struct led_strip_priv *ctx, char *buf, size_t co
 
 static int led_strip_uevent(struct device *dev, struct kobj_uevent_env *env)
 {
-    add_uevent_var(env, "DEVMODE=%#o", 0222);
-    return 0;
+	add_uevent_var(env, "DEVMODE=%#o", 0222);
+	return 0;
 }
 
 /* File Operations */
@@ -137,9 +137,9 @@ static int led_strip_open(struct inode *inode, struct file *file)
 	ctx->cdev = inode->i_cdev;
 	ctx->strip_no = MINOR(ctx->cdev->dev);
 
-  pr_info("Opened led strip %d\n", ctx->strip_no);
+	pr_info("Opened led strip %d\n", ctx->strip_no);
 
-  return 0;
+	return 0;
 }
 
 static int led_strip_release(struct inode *inode, struct file *file)
