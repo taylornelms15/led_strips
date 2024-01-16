@@ -2,10 +2,13 @@
 #include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
+#include <linux/parser.h>
 #include <linux/printk.h>
 
 #define MAX_DEVICES 2
 #define DEVICE_NAME "led_strip"
+#define MAX_LEDS_PER_DEVICE 300
+#define MAX_LED_ARRAY_SIZE (3 * MAX_LEDS_PER_DEVICE)
 
 dev_t device_number;
 static struct class *led_strip_class;
@@ -25,7 +28,111 @@ struct led_strip_priv {
 	 * @strip_no: Which strip this is (corresponds to device minor no)
 	 */
 	int strip_no;
+	/**
+   * @values_to_write: parsed values to write out to led strip 
+	 * Note that there is no locking read-write access to this (currently)
+	 */
+	u8 values_to_write[MAX_LED_ARRAY_SIZE];
 };
+
+/* LED Control */
+
+/**
+ * dump_led_buffer() - Dump buffer of LED's to write
+ */
+static void dump_led_buffer(struct led_strip_priv *ctx, size_t led_count)
+{
+	size_t i = 0;
+
+	pr_info("[");
+	while (i < led_count) {
+		pr_info("{%#02x,%#02x,%#02x}%s\n",
+			ctx->values_to_write[i * 3],
+			ctx->values_to_write[i * 3 + 1],
+			ctx->values_to_write[i * 3 + 2],
+			(i % 8 == 7) ? "---" : "");
+		++i;
+	}
+	pr_info("]\n");
+}
+
+/**
+ * parse_control_string() - Parses a control string as sent by Hyperion
+ * 
+ * Assumes the string contains the following substring:
+ * "[{r0,g0,b0}{r1,g1,b1}{r2,g2,b2}...{rn,gn,bn}]"
+ * where rx, gx, bx are decimal values between 0 and 255 representing
+ * brightness components for the leds
+ *
+ * @Return: number of LED's parsed on success, or negative value on error
+ */
+static int parse_control_string(struct led_strip_priv *ctx, char *buf, size_t count)
+{
+	char* head = buf;
+	char next = '\0';
+	int led_count = 0;
+
+	pr_info("%s: <%s> count %ld\n", __func__, buf, count);
+
+	/* parse until first '[' */
+	do {
+		next = *head++;
+	} while (next != '[');
+	/* head is at the first char after [ */
+
+	/* Parse some number of LED strings */
+	while (next != ']' && led_count < MAX_LEDS_PER_DEVICE) {
+		if (next == '{') {
+			char *num_token;
+			substring_t num_substring;
+			unsigned int match_value;
+			int match_result = 0;
+			head++;
+
+			/* Red */
+			num_token = strsep(&head, ",");
+			num_substring.from = num_token;
+			num_substring.to = head;
+			match_result = match_uint(&num_substring, &match_value);
+			ctx->values_to_write[led_count * 3] = match_value;
+			if (match_result)
+				pr_err("%s: Error on red num_token %s, led_count %d, err %d\n", __func__,
+				       num_token, led_count, match_result);
+			
+			/* Green */
+			num_token = strsep(&head, ",");
+			num_substring.from = num_token;
+			num_substring.to = head;
+			match_result = match_uint(&num_substring, &match_value);
+			ctx->values_to_write[led_count * 3 + 1] = match_value;
+			if (match_result)
+				pr_err("%s: Error on grn num_token %s, led_count %d, err %d\n", __func__,
+				       num_token, led_count, match_result);
+				
+			/* Blue */
+			num_token = strsep(&head, "}");
+			num_substring.from = num_token;
+			num_substring.to = head;
+			match_result = match_uint(&num_substring, &match_value);
+			ctx->values_to_write[led_count * 3 + 2] = match_value;
+			if (match_result)
+				pr_err("%s: Error on grn num_token %s, led_count %d, err %d\n", __func__,
+				       num_token, led_count, match_result);
+
+			next = *head;
+			++led_count;
+		}
+		else {
+			if (head == (buf + count)) {
+				pr_err("%s: Error, went past count searching for ] or {\n", __func__);
+				return -EINVAL;
+			}
+			next = *head++;
+		}
+	}/* end:while */
+
+	return led_count;
+}
 
 /* Class Operations */
 
@@ -73,6 +180,8 @@ static int led_strip_release(struct inode *inode, struct file *file)
 ssize_t led_strip_write(struct file *file, const char __user *user_buffer,
 			size_t count, loff_t *offset)
 {
+	struct led_strip_priv *ctx = file->private_data;
+	int ret = 0;
 	char *tmp_buffer = kzalloc(count + 1, GFP_KERNEL);
 
 	if (!tmp_buffer)
@@ -80,7 +189,12 @@ ssize_t led_strip_write(struct file *file, const char __user *user_buffer,
 	
 	strscpy(tmp_buffer, user_buffer, count);
 
-	pr_info("%s: <%s> count %ld\n", __func__, tmp_buffer, count);
+	ret = parse_control_string(ctx, tmp_buffer, count);
+	
+	/* Debug: print parsed led values */
+	if (ret > 0) {
+		dump_led_buffer(ctx, ret);
+	}
 
 	kfree(tmp_buffer);
 	return count;
