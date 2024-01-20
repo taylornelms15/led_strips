@@ -16,6 +16,7 @@ static struct cdev led_strip_cdev[MAX_DEVICES];
 
 /* LED Control */
 
+#if 0
 /**
  * dump_led_buffer() - Dump buffer of LED's to write
  */
@@ -34,6 +35,7 @@ static void dump_led_buffer(struct led_strip_priv *ctx, size_t led_count)
 	}
 	pr_info("]\n");
 }
+#endif
 
 /**
  * parse_control_string() - Parses a control string as sent by Hyperion
@@ -129,26 +131,34 @@ static int led_strip_uevent(struct device *dev, struct kobj_uevent_env *env)
 static int led_strip_open(struct inode *inode, struct file *file)
 {
 	struct led_strip_priv *ctx;
+	int ret = 0;
 
 	file->private_data = kzalloc(sizeof(struct led_strip_priv), GFP_KERNEL);
 	if (!file->private_data)
 		return -EINVAL;
 	ctx = file->private_data;
 	ctx->cdev = inode->i_cdev;
-	ctx->strip_no = MINOR(ctx->cdev->dev);
+	if (MINOR(ctx->cdev->dev) == 0)
+		ctx->strip_no = LED_0;
+	else
+		ctx->strip_no = LED_1;
 
-	pr_info("Opened led strip %d\n", ctx->strip_no);
+	ret = prepare_output_gpio(ctx);
+
+	pr_info("Opened led strip %d, ret %d\n", ctx->strip_no, ret);
 
 	return 0;
 }
 
 static int led_strip_release(struct inode *inode, struct file *file)
 {
-  int ret = 0;
+	int ret = 0;
 	struct led_strip_priv *ctx = file->private_data;
+
 
 	if (ctx) {
 		pr_info("Closing led_strip %d\n", ctx->strip_no);
+		ret = release_output_gpio(ctx);
 		kfree(ctx);
 		file->private_data = NULL;
 	}
@@ -176,8 +186,9 @@ ssize_t led_strip_write(struct file *file, const char __user *user_buffer,
 	/* Debug: print parsed led values */
 	if (ret < 0)
 		goto out_write;
-
+#if 0
 	dump_led_buffer(ctx, ret);
+#endif
 
 out_write:
 	kfree(tmp_buffer);

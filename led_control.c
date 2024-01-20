@@ -1,4 +1,19 @@
+#include <asm/io.h>
 #include "led_control.h"
+
+/* Registers */
+/* doc says 0x7e, which throws error; what makes it 0xfe?  Is this right?*/
+#define PWM0_BASE 0xfe20c000
+#define PWM1_BASE 0xfe20c800
+
+
+/* Notes */
+#define hightime_zero "220-380ns"
+#define hitime_one "580-1600ns"
+#define lotime_zero "580-1600ns"
+#define lotime_one "220-420ns"
+#define frame_unit "280000ns"
+// Setup the Clock - Use OSC @ 19.2Mhz w/ 3 clocks/tick (52.08ns with that freq)
 
 /**
  * bit_convert_table - Table used to convert 8-bit value to 24-bit PWM signal
@@ -11,6 +26,72 @@
  * which contain "0x92, 0x49, 0x34" (0b100 100 100 100 100 100 110 100)
  * which corresponds to the value 0x02 (0b00000010)
  */
+static const u8 bit_convert_table[];
+
+/* Register Mapping */
+
+/**
+ * map_registers() - call ioremap on registers that we need to access
+ */
+static int map_registers(struct led_registers *reg, enum led_strip_number strip_no)
+{
+	int ret = 0;
+
+	switch(strip_no) {
+	case LED_0:
+		reg->pwm = ioremap(PWM0_BASE, sizeof(struct pwm_t));
+		if (!reg->pwm) {
+			ret = -EIO;
+			break;
+		}
+		break;
+	case LED_1:
+		reg->pwm = ioremap(PWM1_BASE, sizeof(struct pwm_t));
+		if (!reg->pwm) {
+			ret = -EIO;
+			break;
+		}
+		break;
+	default:
+		ret = -EINVAL;
+		break;
+	}
+
+	return ret;
+}
+
+static int unmap_registers(struct led_registers *reg)
+{
+	iounmap(reg->pwm);
+	reg->pwm = NULL;
+	return 0;
+}
+
+/* High-Level Functions */
+
+int prepare_output_gpio(struct led_strip_priv *ctx)
+{
+	int ret;
+	
+	ret = map_registers(&ctx->reg, ctx->strip_no);
+	if (ret)
+		return ret;
+
+	return ret;
+}
+
+int release_output_gpio(struct led_strip_priv *ctx)
+{
+	return unmap_registers(&ctx->reg);
+}
+
+int output_led_values(struct led_strip_priv *ctx, int num_leds)
+{
+	return 0;
+}
+
+/* Data */
+
 static const u8 bit_convert_table[] = {
 	0x92, 0x49, 0x24, 0x92, 0x49, 0x26, 0x92, 0x49, 0x34, 0x92, 0x49, 0x36,
 	0x92, 0x49, 0xa4, 0x92, 0x49, 0xa6, 0x92, 0x49, 0xb4, 0x92, 0x49, 0xb6,
@@ -76,18 +157,4 @@ static const u8 bit_convert_table[] = {
 	0xdb, 0x69, 0xa4, 0xdb, 0x69, 0xa6, 0xdb, 0x69, 0xb4, 0xdb, 0x69, 0xb6,
 	0xdb, 0x6d, 0x24, 0xdb, 0x6d, 0x26, 0xdb, 0x6d, 0x34, 0xdb, 0x6d, 0x36,
 	0xdb, 0x6d, 0xa4, 0xdb, 0x6d, 0xa6, 0xdb, 0x6d, 0xb4, 0xdb, 0x6d, 0xb6,
-}
-int prepare_output_gpio(struct led_strip_priv *ctx)
-{
-	return 0;
-}
-
-int release_output_gpio(struct led_strip_priv *ctx)
-{
-	return 0;
-}
-
-int output_led_values(struct led_strip_priv *ctx, int num_leds)
-{
-	return 0;
-}
+};
