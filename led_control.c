@@ -5,7 +5,9 @@
 /* doc says 0x7e, which throws error; what makes it 0xfe?  Is this right?*/
 #define PWM0_BASE 0xfe20c000
 #define PWM1_BASE 0xfe20c800
+#define CM_CLK_CTL_BASE 0xfe1010a0
 
+#define USING_IO_MEMCPY
 
 /* Notes */
 #define hightime_zero "220-380ns"
@@ -56,6 +58,20 @@ static int map_registers(struct led_registers *reg, enum led_strip_number strip_
 		ret = -EINVAL;
 		break;
 	}
+	if (ret)
+		goto map_registers_out;
+
+	reg->cm_clk = ioremap(CM_CLK_CTL_BASE, sizeof(struct cm_clk_t));
+	if (!reg->cm_clk) {
+		ret = -EIO;
+		goto unmap_pwm;
+	}
+
+	return ret;
+
+unmap_pwm:
+	iounmap(reg->pwm);
+	reg->pwm = NULL;
 
 	return ret;
 }
@@ -65,6 +81,35 @@ static int unmap_registers(struct led_registers *reg)
 	iounmap(reg->pwm);
 	reg->pwm = NULL;
 	return 0;
+}
+
+/* Transfer Functions */
+
+/**
+ * convert_brightness_values() - Converts buffer of brightness values into PWM levels
+ * @out_vals: output array of memory into which to put PWM vals
+ * @brightnesses: input array of brightness values
+ * @num_brightnesses: how many brightnesses to write
+ *
+ * Note that out_vals needs to be at least three times the length of num_brightnesses
+ *
+ * Return: number of bytes written to out_vals, or a negative value on error
+ */
+int convert_brightness_values(u8 *out_vals, const u8 *brightnesses, int num_brightnesses)
+{
+	int i;
+
+	for(i = 0; i < num_brightnesses; ++i) {
+#ifdef USING_IO_MEMCPY
+		memcpy_io(out_vals[3 * i],
+			  bit_convert_table[3 * brightnesses[i]], 3);
+#else
+		memcpy(out_vals[3 * i],
+		       bit_convert_table[3 * brightnesses[i]], 3);
+#endif
+	}
+	
+	return num_brightnesses * 3;
 }
 
 /* High-Level Functions */
