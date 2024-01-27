@@ -184,11 +184,13 @@ ssize_t led_strip_write(struct file *file, const char __user *user_buffer,
 	ret = parse_control_string(ctx, tmp_buffer, count);
 	
 	/* Debug: print parsed led values */
-	if (ret < 0)
+	if (ret <= 0)
 		goto out_write;
 #if 0
 	dump_led_buffer(ctx, ret);
 #endif
+
+	output_led_values(ctx, ret);
 
 out_write:
 	kfree(tmp_buffer);

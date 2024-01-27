@@ -7,6 +7,9 @@
 #define PWM1_BASE 0xfe20c800
 #define CM_CLK_CTL_BASE 0xfe1010a0
 
+#define STRIP0_DMANUM_DEFAULT 10
+#define STRIP1_DMANUM_DEFAULT 11
+
 #define USING_IO_MEMCPY
 
 /* Notes */
@@ -38,9 +41,11 @@ static const u8 bit_convert_table[];
 static int map_registers(struct led_registers *reg, enum led_strip_number strip_no)
 {
 	int ret = 0;
+	uint32_t dma_addr;
 
 	switch(strip_no) {
 	case LED_0:
+		dma_addr = dmanum_to_addr(STRIP0_DMANUM_DEFAULT);
 		reg->pwm = ioremap(PWM0_BASE, sizeof(struct pwm_t));
 		if (!reg->pwm) {
 			ret = -EIO;
@@ -48,6 +53,8 @@ static int map_registers(struct led_registers *reg, enum led_strip_number strip_
 		}
 		break;
 	case LED_1:
+		dma_addr = dmanum_to_addr(STRIP1_DMANUM_DEFAULT);
+		dma_addr = dmanum_to_addr(10);
 		reg->pwm = ioremap(PWM1_BASE, sizeof(struct pwm_t));
 		if (!reg->pwm) {
 			ret = -EIO;
@@ -67,17 +74,28 @@ static int map_registers(struct led_registers *reg, enum led_strip_number strip_
 		goto unmap_pwm;
 	}
 
+	reg->dma = ioremap(dma_addr, sizeof(struct dma_t));
+	if (!reg->dma) {
+		ret = -EIO;
+		goto unmap_cm_clk;
+	}
+
 	return ret;
 
+unmap_cm_clk:
+	iounmap(reg->cm_clk);
+	reg->cm_clk = NULL;
 unmap_pwm:
 	iounmap(reg->pwm);
 	reg->pwm = NULL;
-
+map_registers_out:
 	return ret;
 }
 
 static int unmap_registers(struct led_registers *reg)
 {
+	iounmap(reg->dma);
+	iounmap(reg->cm_clk);
 	iounmap(reg->pwm);
 	reg->pwm = NULL;
 	return 0;
@@ -101,11 +119,11 @@ int convert_brightness_values(u8 *out_vals, const u8 *brightnesses, int num_brig
 
 	for(i = 0; i < num_brightnesses; ++i) {
 #ifdef USING_IO_MEMCPY
-		memcpy_io(out_vals[3 * i],
-			  bit_convert_table[3 * brightnesses[i]], 3);
+		memcpy_toio((volatile void *) &out_vals[3 * i],
+			  &bit_convert_table[3 * brightnesses[i]], 3);
 #else
-		memcpy(out_vals[3 * i],
-		       bit_convert_table[3 * brightnesses[i]], 3);
+		memcpy(&out_vals[3 * i],
+		       &bit_convert_table[3 * brightnesses[i]], 3);
 #endif
 	}
 	
@@ -132,6 +150,9 @@ int release_output_gpio(struct led_strip_priv *ctx)
 
 int output_led_values(struct led_strip_priv *ctx, int num_leds)
 {
+	u8 *vals = ctx->values_to_write;
+
+	(void)vals;
 	return 0;
 }
 
