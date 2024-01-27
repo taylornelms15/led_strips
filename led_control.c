@@ -1,4 +1,6 @@
 #include <asm/io.h>
+#include <linux/delay.h>
+
 #include "led_control.h"
 
 /* Registers */
@@ -18,7 +20,9 @@
 #define lotime_zero "580-1600ns"
 #define lotime_one "220-420ns"
 #define frame_unit "280000ns"
-// Setup the Clock - Use OSC @ 19.2Mhz w/ 3 clocks/tick (52.08ns with that freq)
+
+#define OSC_FREQ 54000000
+#define TARGET_FREQ 2400000
 
 /**
  * bit_convert_table - Table used to convert 8-bit value to 24-bit PWM signal
@@ -101,6 +105,27 @@ static int unmap_registers(struct led_registers *reg)
 	return 0;
 }
 
+/* Setup */
+
+static int setup_clocks(struct led_strip_priv *ctx)
+{
+	struct cm_clk_t *cm_clk = ctx->reg.cm_clk;
+
+	/* ends up with 2.454 MHz clock, so 407.407ns per tick */
+	cm_clk->div = CM_CLK_DIV_PASSWD | CM_CLK_DIV_DIVI(OSC_FREQ / TARGET_FREQ);
+	cm_clk->ctl = CM_CLK_CTL_PASSWD | CM_CLK_CTL_SRC_OSC;
+	cm_clk->ctl = CM_CLK_CTL_PASSWD | CM_CLK_CTL_SRC_OSC | CM_CLK_CTL_ENAB;
+	usleep_range(10, 20);
+	while (!(cm_clk->ctl & CM_CLK_CTL_BUSY)) {
+		pr_info("waiting for clocks to set while busy\n");
+		usleep_range(10, 20);
+	}
+
+	pr_info("Successfully set up clocks\n");
+
+	return 0;
+}
+
 /* Transfer Functions */
 
 /**
@@ -137,6 +162,9 @@ int prepare_output_gpio(struct led_strip_priv *ctx)
 	int ret;
 	
 	ret = map_registers(&ctx->reg, ctx->strip_no);
+	if (ret)
+		return ret;
+	ret = setup_clocks(ctx);
 	if (ret)
 		return ret;
 
