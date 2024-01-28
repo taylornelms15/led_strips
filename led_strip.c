@@ -42,7 +42,7 @@ static int parse_control_string(struct led_strip_priv *ctx, char *buf, size_t co
 	char next = '\0';
 	int led_count = 0;
 
-	pr_info("%s: <%s> count %ld\n", __func__, buf, count);
+	dev_info(ctx->dev, "%s: <%s> count %ld\n", __func__, buf, count);
 
 	/* parse until first '[' */
 	do {
@@ -69,7 +69,7 @@ static int parse_control_string(struct led_strip_priv *ctx, char *buf, size_t co
 			match_result = match_uint(&num_substring, &match_value);
 			ctx->values_to_write[led_count * 3] = match_value;
 			if (match_result)
-				pr_err("%s: Error on red num_token %s, led_count %d, err %d\n",
+				dev_err(ctx->dev, "%s: Error on red num_token %s, led_count %d, err %d\n",
 				       __func__, num_token, led_count, match_result);
 			
 			/* Green */
@@ -79,7 +79,7 @@ static int parse_control_string(struct led_strip_priv *ctx, char *buf, size_t co
 			match_result = match_uint(&num_substring, &match_value);
 			ctx->values_to_write[led_count * 3 + 1] = match_value;
 			if (match_result)
-				pr_err("%s: Error on grn num_token %s, led_count %d, err %d\n",
+				dev_err(ctx->dev, "%s: Error on grn num_token %s, led_count %d, err %d\n",
 				       __func__, num_token, led_count, match_result);
 				
 			/* Blue */
@@ -89,7 +89,7 @@ static int parse_control_string(struct led_strip_priv *ctx, char *buf, size_t co
 			match_result = match_uint(&num_substring, &match_value);
 			ctx->values_to_write[led_count * 3 + 2] = match_value;
 			if (match_result)
-				pr_err("%s: Error on blu num_token %s, led_count %d, err %d\n",
+				dev_err(ctx->dev, "%s: Error on blu num_token %s, led_count %d, err %d\n",
 				       __func__, num_token, led_count, match_result);
 
 			next = *head;
@@ -97,7 +97,7 @@ static int parse_control_string(struct led_strip_priv *ctx, char *buf, size_t co
 		}
 		else {
 			if (head == (buf + count)) {
-				pr_err("%s: Error, went past count searching for ] or {\n", __func__);
+				dev_err(ctx->dev, "%s: Error, went past count searching for ] or {\n", __func__);
 				return -EINVAL;
 			}
 			next = *head++;
@@ -135,7 +135,7 @@ static int led_strip_open(struct inode *inode, struct file *file)
 
 	ret = prepare_output_gpio(ctx);
 
-	pr_info("Opened led strip %d, ret %d\n", ctx->strip_no, ret);
+	dev_info(ctx->dev, "Opened led strip %d, ret %d\n", ctx->strip_no, ret);
 
 	return 0;
 }
@@ -147,7 +147,7 @@ static int led_strip_release(struct inode *inode, struct file *file)
 
 
 	if (ctx) {
-		pr_info("Closing led_strip %d\n", ctx->strip_no);
+		dev_info(ctx->dev, "Closing led_strip %d\n", ctx->strip_no);
 		ret = release_output_gpio(ctx);
 		kfree(ctx);
 		file->private_data = NULL;
@@ -205,7 +205,7 @@ static int __init ledstrip_init(void)
 		dev_t my_device;
 		int i = 0;
 
-		led_strip_class = class_create(THIS_MODULE, "led_strip_class");
+		led_strip_class = class_create(THIS_MODULE, "led_strip");
 		led_strip_class->dev_uevent = led_strip_uevent;
 		for(i = 0; i < MAX_DEVICES; ++i) {
 			my_device = MKDEV(major, i);
@@ -218,7 +218,9 @@ static int __init ledstrip_init(void)
 			else {
 				led_strip_devices[i].dev =
 					device_create(led_strip_class, NULL, my_device, NULL, DEVICE_NAME "%d", i);
-				pr_info("%s: Successfully created device %s%d\n", __func__, DEVICE_NAME, i);
+				dev_info(led_strip_devices[i].dev,
+					"%s: Successfully created device %s%d\n",
+					__func__, DEVICE_NAME, i);
 			}
 		}
 	}

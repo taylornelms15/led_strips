@@ -117,11 +117,11 @@ static int setup_clocks(struct led_strip_priv *ctx)
 	cm_clk->ctl = CM_CLK_CTL_PASSWD | CM_CLK_CTL_SRC_OSC | CM_CLK_CTL_ENAB;
 	usleep_range(10, 20);
 	while (!(cm_clk->ctl & CM_CLK_CTL_BUSY)) {
-		pr_info("waiting for clocks to set while busy\n");
+		dev_info(ctx->dev, "waiting for clocks to set while busy\n");
 		usleep_range(10, 20);
 	}
 
-	pr_info("Successfully set up clocks\n");
+	dev_info(ctx->dev, "Successfully set up clocks\n");
 
 	return 0;
 }
@@ -205,13 +205,13 @@ int release_output_gpio(struct led_strip_priv *ctx)
 
 	ret = teardown_dma(ctx);
 	if (ret)
-		pr_err("%s Error tearing down dma (%d)\n", __func__, ret);
+		dev_err(ctx->dev, "%s Error tearing down dma (%d)\n", __func__, ret);
 	ret = teardown_clocks(ctx);
 	if (ret)
-		pr_err("%s Error tearing down clocks (%d)\n", __func__, ret);
+		dev_err(ctx->dev, "%s Error tearing down clocks (%d)\n", __func__, ret);
 	ret = unmap_registers(&ctx->reg);
 	if (ret)
-		pr_err("%s Error unmapping registers (%d)\n", __func__, ret);
+		dev_err(ctx->dev, "%s Error unmapping registers (%d)\n", __func__, ret);
 
 	return ret;
 }
