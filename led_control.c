@@ -126,6 +126,31 @@ static int setup_clocks(struct led_strip_priv *ctx)
 	return 0;
 }
 
+static int setup_dma(struct led_strip_priv *ctx)
+{
+	// Alloc our transfer areas
+
+	// Pre-fill constant data into CB section of prealloc
+
+	// Pre-fill constant data into DMA registers
+
+	return 0;
+}
+
+/* Teardown */
+
+static int teardown_clocks(struct led_strip_priv *ctx)
+{
+	/* Nothing to tear down */
+	return 0;
+}
+
+static int teardown_dma(struct led_strip_priv *ctx)
+{
+
+	return 0;
+};
+
 /* Transfer Functions */
 
 /**
@@ -167,13 +192,28 @@ int prepare_output_gpio(struct led_strip_priv *ctx)
 	ret = setup_clocks(ctx);
 	if (ret)
 		return ret;
+	ret = setup_dma(ctx);
+	if (ret)
+		return ret;
 
 	return ret;
 }
 
 int release_output_gpio(struct led_strip_priv *ctx)
 {
-	return unmap_registers(&ctx->reg);
+	int ret = 0;
+
+	ret = teardown_dma(ctx);
+	if (ret)
+		pr_err("%s Error tearing down dma (%d)\n", __func__, ret);
+	ret = teardown_clocks(ctx);
+	if (ret)
+		pr_err("%s Error tearing down clocks (%d)\n", __func__, ret);
+	ret = unmap_registers(&ctx->reg);
+	if (ret)
+		pr_err("%s Error unmapping registers (%d)\n", __func__, ret);
+
+	return ret;
 }
 
 int output_led_values(struct led_strip_priv *ctx, int num_leds)

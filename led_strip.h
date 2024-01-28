@@ -23,6 +23,10 @@ enum led_strip_number {
  */
 struct led_strip_priv {
 	/**
+	 * @dev: reference to device node
+	 */
+	struct device *dev;
+	/**
 	 * @cdev: reference to parent character device
 	 */
 	struct cdev *cdev;

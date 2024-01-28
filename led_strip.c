@@ -12,30 +12,19 @@
 
 dev_t device_number;
 static struct class *led_strip_class;
-static struct cdev led_strip_cdev[MAX_DEVICES];
+
+struct led_strip_device {
+	struct device *dev;
+	struct cdev cdev;
+};
+
+#define cdev_to_dev(cdev_ptr) (container_of(cdev_ptr, struct led_strip_device, cdev)->dev)
+
+static struct led_strip_device led_strip_devices[MAX_DEVICES];
+
+//static struct cdev led_strip_cdev[MAX_DEVICES];
 
 /* LED Control */
-
-#if 0
-/**
- * dump_led_buffer() - Dump buffer of LED's to write
- */
-static void dump_led_buffer(struct led_strip_priv *ctx, size_t led_count)
-{
-	size_t i = 0;
-
-	pr_info("[");
-	while (i < led_count) {
-		pr_info("{%#02x,%#02x,%#02x}%s\n",
-			ctx->values_to_write[i * 3],
-			ctx->values_to_write[i * 3 + 1],
-			ctx->values_to_write[i * 3 + 2],
-			(i % 8 == 7) ? "---" : "");
-		++i;
-	}
-	pr_info("]\n");
-}
-#endif
 
 /**
  * parse_control_string() - Parses a control string as sent by Hyperion
@@ -138,6 +127,7 @@ static int led_strip_open(struct inode *inode, struct file *file)
 		return -EINVAL;
 	ctx = file->private_data;
 	ctx->cdev = inode->i_cdev;
+	ctx->dev = cdev_to_dev(ctx->cdev);
 	if (MINOR(ctx->cdev->dev) == 0)
 		ctx->strip_no = LED_0;
 	else
@@ -186,9 +176,6 @@ ssize_t led_strip_write(struct file *file, const char __user *user_buffer,
 	/* Debug: print parsed led values */
 	if (ret <= 0)
 		goto out_write;
-#if 0
-	dump_led_buffer(ctx, ret);
-#endif
 
 	output_led_values(ctx, ret);
 
@@ -222,14 +209,15 @@ static int __init ledstrip_init(void)
 		led_strip_class->dev_uevent = led_strip_uevent;
 		for(i = 0; i < MAX_DEVICES; ++i) {
 			my_device = MKDEV(major, i);
-			cdev_init(&led_strip_cdev[i], &fops);
-			pr_info("%s alloc'd cdev %p\n", __func__, &led_strip_cdev[i]);
-			ret = cdev_add(&led_strip_cdev[i], my_device, 1);
+			cdev_init(&led_strip_devices[i].cdev, &fops);
+			pr_info("%s alloc'd cdev %p\n", __func__, &led_strip_devices[i].cdev);
+			ret = cdev_add(&led_strip_devices[i].cdev, my_device, 1);
 			if (ret){
 				pr_err("%s: Failed in adding cdev to subsystem %d\n", __func__, ret);
 			}
 			else {
-				device_create(led_strip_class, NULL, my_device, NULL, DEVICE_NAME "%d", i);
+				led_strip_devices[i].dev =
+					device_create(led_strip_class, NULL, my_device, NULL, DEVICE_NAME "%d", i);
 				pr_info("%s: Successfully created device %s%d\n", __func__, DEVICE_NAME, i);
 			}
 		}
@@ -251,7 +239,7 @@ static void __exit ledstrip_cleanup(void)
 
 	for (i = 0; i < MAX_DEVICES; i++) {
 		my_device = MKDEV(major, i);
-		cdev_del(&led_strip_cdev[i]);
+		cdev_del(&led_strip_devices[i].cdev);
 		device_destroy(led_strip_class, my_device);
 	}
 	class_destroy(led_strip_class);
