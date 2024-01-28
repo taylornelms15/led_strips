@@ -50,6 +50,7 @@ struct __attribute__((packed, aligned(4))) pwm_t
 	u32 rng2;
 	u32 dat2;
 };
+#define RPI_PWM_FIF1_OFFSET 0x18
 
 /**
  * struct cm_clk_t - Registers for clock control

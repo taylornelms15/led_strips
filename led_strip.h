@@ -7,6 +7,9 @@
 
 #define MAX_LEDS_PER_DEVICE 300
 #define MAX_LED_ARRAY_SIZE (3 * MAX_LEDS_PER_DEVICE)
+#define SERIALIZED_PWM_LED_BITS (MAX_LED_ARRAY_SIZE * 3)
+#define SERIALIZED_PWM_RESET_BITS 32 //Currently: just set low for 32 bits, then do a normal wait operation for rest of frame done
+#define SERIALIZED_PWM_BITS (SERIALIZED_PWM_LED_BITS + SERIALIZED_PWM_RESET_BITS)
 
 struct led_registers;
 
@@ -18,7 +21,7 @@ enum led_strip_number {
 
 struct led_dma_region {
 	struct dma_cb_t dma_cb;
-	u8 data[MAX_LED_ARRAY_SIZE * 3];
+	u8 data[SERIALIZED_PWM_BITS];
 };
 
 /**

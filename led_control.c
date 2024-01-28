@@ -22,6 +22,10 @@
 #define lotime_zero "580-1600ns"
 #define lotime_one "220-420ns"
 #define frame_unit "280000ns"
+#define frame_blank_pulses 700 //280 us / pulse_ns, plus some overflow
+#define pulse_ns "407.407ns"
+
+#define FRAME_WAIT_US 280
 
 #define OSC_FREQ 54000000
 #define TARGET_FREQ 2400000
@@ -130,6 +134,13 @@ static int setup_clocks(struct led_strip_priv *ctx)
 
 static int setup_dma(struct led_strip_priv *ctx)
 {
+	uint32_t pwm_base_addr;
+
+	if (ctx->strip_no == LED_0)
+		pwm_base_addr = PWM0_BASE;
+	else
+		pwm_base_addr = PWM1_BASE;
+
 	// Alloc our transfer areas
 	dma_set_coherent_mask(ctx->dev, 0xffffffff);
 	ctx->dma_mem = dma_alloc_coherent(ctx->dev, sizeof(struct led_dma_region), &ctx->dma_handle, GFP_KERNEL);
@@ -143,6 +154,18 @@ static int setup_dma(struct led_strip_priv *ctx)
 	}
 
 	// Pre-fill constant data into CB section of prealloc
+	ctx->dma_mem->dma_cb.ti = RPI_DMA_TI_NO_WIDE_BURSTS |  // 32-bit transfers
+				  RPI_DMA_TI_WAIT_RESP |       // wait for write complete
+				  RPI_DMA_TI_DEST_DREQ |       // user peripheral flow control
+				  RPI_DMA_TI_PERMAP(5) |       // PWM peripheral
+				  RPI_DMA_TI_SRC_INC;          // Increment src addr
+	ctx->dma_mem->dma_cb.txfr_len = SERIALIZED_PWM_BITS;
+	/* pointer-math, getting physical address of the data[] array */
+	ctx->dma_mem->dma_cb.source_ad = (uint32_t)(dma_to_phys(ctx->dev, ctx->dma_handle) +
+		(uint32_t)((void *)&ctx->dma_mem->data - (void *)&ctx->dma_mem));
+	ctx->dma_mem->dma_cb.dest_ad = pwm_base_addr + RPI_PWM_FIF1_OFFSET;
+	ctx->dma_mem->dma_cb.stride = 0;
+	ctx->dma_mem->dma_cb.next_cb = 0;
 
 	// Pre-fill constant data into DMA registers
 
