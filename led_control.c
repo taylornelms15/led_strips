@@ -165,7 +165,7 @@ static int setup_dma(struct led_strip_priv *ctx)
 		(uint32_t)((void *)&ctx->dma_mem->data - (void *)&ctx->dma_mem));
 	ctx->dma_mem->dma_cb.dest_ad = pwm_base_addr + RPI_PWM_FIF1_OFFSET;
 	ctx->dma_mem->dma_cb.stride = 0;
-	ctx->dma_mem->dma_cb.next_cb = 0;
+	ctx->dma_mem->dma_cb.nextconbk = 0;
 
 	// Pre-fill constant data into DMA registers
 
@@ -257,9 +257,15 @@ int release_output_gpio(struct led_strip_priv *ctx)
 
 int output_led_values(struct led_strip_priv *ctx, int num_leds)
 {
-	u8 *vals = ctx->values_to_write;
+	int num_converted;
 
-	(void)vals;
+	/* convert our LED values into serialized bits in our dma memory */
+	num_converted = convert_brightness_values(ctx->dma_mem->data, ctx->values_to_write, num_leds);
+	/* zero out remaining values, to be sure */
+	memset(&ctx->dma_mem->data[num_converted * 3], 0x00, SERIALIZED_PWM_BITS - (num_converted * 3));
+
+	/* start DMA transfer */
+
 	return 0;
 }
 
