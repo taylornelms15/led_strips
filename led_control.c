@@ -1,5 +1,7 @@
 #include <asm/io.h>
 #include <linux/delay.h>
+#include <linux/dma-direct.h>
+#include <linux/dma-mapping.h>
 
 #include "led_control.h"
 
@@ -129,6 +131,16 @@ static int setup_clocks(struct led_strip_priv *ctx)
 static int setup_dma(struct led_strip_priv *ctx)
 {
 	// Alloc our transfer areas
+	dma_set_coherent_mask(ctx->dev, 0xffffffff);
+	ctx->dma_mem = dma_alloc_coherent(ctx->dev, sizeof(struct led_dma_region), &ctx->dma_handle, GFP_KERNEL);
+	if (!ctx->dma_mem) {
+		dev_err(ctx->dev, "Error allocating dma_mem\n");
+		return -ENOMEM;
+	}
+	else {
+		dev_info(ctx->dev, "Allocated dma_mem, cpu addr %p, dma_handle %#016llx, phys_addr_t %#016llx\n",
+			ctx->dma_mem, ctx->dma_handle, dma_to_phys(ctx->dev, ctx->dma_handle));
+	}
 
 	// Pre-fill constant data into CB section of prealloc
 
@@ -147,6 +159,10 @@ static int teardown_clocks(struct led_strip_priv *ctx)
 
 static int teardown_dma(struct led_strip_priv *ctx)
 {
+	if (ctx->dma_mem) {
+		dma_free_coherent(ctx->dev, sizeof(struct led_dma_region), ctx->dma_mem, ctx->dma_handle);
+		ctx->dma_mem = NULL;
+	}
 
 	return 0;
 };

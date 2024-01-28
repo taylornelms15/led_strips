@@ -16,6 +16,11 @@ enum led_strip_number {
 };
 
 
+struct led_dma_region {
+	struct dma_cb_t dma_cb;
+	u8 data[MAX_LED_ARRAY_SIZE * 3];
+};
+
 /**
  * struct led_strip_priv: Private data for led_strip driver
  *
@@ -43,6 +48,14 @@ struct led_strip_priv {
 	 * Note that there is no locking read-write access to this (currently)
 	 */
 	u8 values_to_write[MAX_LED_ARRAY_SIZE];
+	/**
+	 * @dma_mem: allocated dma memory to use for data transfer
+	 */
+	struct led_dma_region *dma_mem;
+	/**
+	 * @dma_handle: dma handle for our allocated dma_mem
+	 */
+	dma_addr_t dma_handle;
 };
 
 #endif
